@@ -3,27 +3,36 @@ package giacomo.u5_s1_l1;
 import giacomo.u5_s1_l1.config.OrderConfig;
 import giacomo.u5_s1_l1.entities.*;
 import giacomo.u5_s1_l1.entities.Table.TableStatus;
-import giacomo.u5_s1_l1.entities.Order.OrderState;
+import giacomo.u5_s1_l1.repositories.PizzaRepository;
+import giacomo.u5_s1_l1.repositories.ToppingRepository;
+import giacomo.u5_s1_l1.repositories.DrinkRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.context.ApplicationContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @SpringBootApplication
 public class PizzeriaApplication implements CommandLineRunner {
 
     private static final Logger logger = LoggerFactory.getLogger(PizzeriaApplication.class);
 
-    @Autowired
-    private Menu menu;
+    @Autowired private Menu menu;
+    @Autowired private OrderConfig orderConfig;
 
-    @Autowired
-    private OrderConfig orderConfig; // Il Bean che contiene il costo del coperto
+    // Iniezione dei Beans per il salvataggio
+    @Autowired private List<Pizza> allPizzas;
+    @Autowired private List<Topping> allToppings;
+    @Autowired private List<Drink> allDrinks;
+
+    // Iniezione dei Repository per la persistenza e le query
+    @Autowired private PizzaRepository pizzaRepo;
+    @Autowired private ToppingRepository toppingRepo;
+    @Autowired private DrinkRepository drinkRepo;
 
     public static void main(String[] args) {
         SpringApplication.run(PizzeriaApplication.class, args);
@@ -32,39 +41,61 @@ public class PizzeriaApplication implements CommandLineRunner {
     @Override
     public void run(String... args) throws Exception {
         logger.info("******************************************************************");
-        logger.info("Esercizio #2: Inizializzazione Applicazione e Gestione Ordini");
+        logger.info("Avvio Pizzeria Application: Configurazione Menu e Persistenza");
         logger.info("******************************************************************");
 
-        // 1. Inizializzazione e stampa del Menu
-        menu.printMenu();
-        logger.info("Menu inizializzato e stampato.");
+        // 1. Salvataggio delle Entity nel database (Esercizio #3 Persistenza)
+        logger.info("-> Salvataggio Beans in PostgreSQL...");
+        // Filtriamo i Beans che non hanno ID (significa che non sono ancora stati salvati)
+        toppingRepo.saveAll(allToppings.stream().filter(t -> t.getId() == null).collect(Collectors.toList()));
+        drinkRepo.saveAll(allDrinks.stream().filter(d -> d.getId() == null).collect(Collectors.toList()));
+        pizzaRepo.saveAll(allPizzas.stream().filter(p -> p.getId() == null).collect(Collectors.toList()));
+        logger.info("-> Dati menu salvati con successo.");
 
-        // 2. Creazione di un Tavolo
+
+        // 2. Esecuzione delle Query (Esercizio #4 Persistenza)
+        logger.info("\n--- Esecuzione Query JPA (findByName, findByCaloriesLessThan) ---");
+
+        // Query 1: Trova Pizza per nome
+        String targetPizzaName = "Hawaiian Pizza (tomato, cheese, ham, pineapple)";
+        Pizza foundPizza = pizzaRepo.findByName(targetPizzaName);
+        logger.info("Query 1: Trovata Pizza per nome: {}", foundPizza != null ? foundPizza.getName() : "Nessuna");
+
+        // Query 2: Trova Pizze con meno di 1150 calorie
+        List<Pizza> lightPizzas = pizzaRepo.findByCaloriesLessThan(1150);
+        logger.info("Query 2: Trovate {} pizze con meno di 1150 calorie.", lightPizzas.size());
+        lightPizzas.forEach(p -> logger.info("  -> {} ({} Cal)", p.getName(), p.getCalories()));
+
+        logger.info("\n--- Stampa Menu Completo (Esercizio #1) ---");
+        menu.printMenu();
+
+
+        // 3. Creazione e Stampa di un Ordine (Esercizio #2 Ordini)
+        logger.info("\n--- Creazione e Stampa Ordine ---");
+
+        // Inizializza Tavolo
         Table table1 = new Table(1, 4, TableStatus.FREE);
         table1.setStatus(TableStatus.OCCUPIED);
-        logger.info("Tavolo creato e occupato: {}", table1);
 
-        // 3. Creazione di un Ordine
-        // Creiamo un ordine con la prima pizza, il primo drink e un topping extra
-        MenuItem margherita = menu.getPizzas().get(0);
-        MenuItem lemonade = menu.getDrinks().get(0);
-        MenuItem ham = menu.getToppings().get(1);
+        // Leggiamo i dati dal DB per l'ordine (coerenza)
+        Pizza orderPizza = pizzaRepo.findByName("Pizza Margherita (tomato, cheese)");
+        Drink orderDrink = drinkRepo.findAll().stream().filter(d -> d.getName().contains("0.33l")).findFirst().orElse(null);
+        Topping orderTopping = toppingRepo.findByName("pineapple"); // Topping extra
 
-        List<MenuItem> items = List.of(margherita, lemonade, ham);
+        // Popola l'ordine
+        List<MenuItem> items = List.of(orderPizza, orderDrink, orderTopping);
 
         int covers = 3;
         Order newOrder = new Order(table1, covers, items);
 
-        // 4. Calcolo del totale
+        // Calcolo del totale
         double coverCharge = orderConfig.getCoverCharge();
         newOrder.calculateTotal(coverCharge);
 
-        // 5. Stampa dell'ordine
+        // Stampa a video dell'ordine utilizzando il logger
         logger.info("*********************** Dettagli Ordine ***********************");
         logger.info("Ordine ID: {}", newOrder.getOrderId());
-        logger.info("Tavolo: {} (Coperti: {})", newOrder.getTable().getTableNumber(), newOrder.getCovers());
-        logger.info("Stato: {}", newOrder.getState());
-        logger.info("Ora acquisizione: {}", newOrder.getAcquisitionTime());
+        logger.info("Tavolo: {} (Coperti: {}) - Stato: {}", newOrder.getTable().getTableNumber(), newOrder.getCovers(), newOrder.getState());
         logger.info("Costo Coperto (per persona): €{}", coverCharge);
 
         logger.info("\n--- Elementi Ordinati ---");

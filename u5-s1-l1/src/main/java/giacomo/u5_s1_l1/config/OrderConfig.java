@@ -2,11 +2,12 @@ package giacomo.u5_s1_l1.config;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.PropertySource;
 
 @Configuration
+@PropertySource("classpath:application.properties")
 public class OrderConfig {
 
-    // Inietta il valore dal file application.properties
     @Value("${pizzeria.cover.charge}")
     private double coverCharge;
 
